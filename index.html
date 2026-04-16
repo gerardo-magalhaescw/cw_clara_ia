@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conversa · Cardápio Web</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: linear-gradient(160deg, #f3ecfa 0%, #fff 60%, #f8f4fc 100%);
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      color: #101828;
+      padding: 20px 16px 40px;
+    }
+    #app {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    .card {
+      background: linear-gradient(180deg, #f8f4fc, #ffffff 50%, #f3ecfa);
+      padding: 22px;
+      border-radius: 18px;
+      border: 1px solid #ece3f6;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      gap: 10px;
+    }
+    .header-left .title {
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .header-left .subtitle {
+      font-size: 12px;
+      color: #6A3696;
+      margin-top: 2px;
+    }
+    .header-right {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .chip {
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid #ece3f6;
+      font-size: 12px;
+      color: #6A3696;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .btn-copy {
+      padding: 6px 10px;
+      border-radius: 10px;
+      background: #fff;
+      border: 1px solid #ece3f6;
+      font-size: 12px;
+      color: #6A3696;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.1s;
+    }
+    .btn-copy:hover { background: #f3ecfa; }
+    #chat-box {
+      background: #fff;
+      border: 1px solid #ece3f6;
+      border-radius: 16px;
+      padding: 14px;
+      max-height: 520px;
+      overflow-y: auto;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 18px;
+    }
+    .btn-nova {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #6A3696, #8246B8);
+      color: #fff;
+      text-decoration: none;
+      padding: 12px 18px;
+      border-radius: 14px;
+      font-weight: 800;
+      font-size: 14px;
+      box-shadow: 0 12px 24px rgba(106,54,150,.28);
+      transition: transform .12s ease, filter .12s ease;
+    }
+    .btn-nova:hover { transform: translateY(-1px); filter: brightness(1.05); }
+
+    /* Estado vazio / erro / loading */
+    .state-box {
+      padding: 40px 20px;
+      text-align: center;
+      color: #667085;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .state-box .icon { font-size: 32px; margin-bottom: 12px; }
+    .state-box strong { color: #101828; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="card">
+      <div class="header">
+        <div class="header-left">
+          <div class="title">Conversa</div>
+          <div class="subtitle" id="subtitle">Histórico formatado · Cardápio Web</div>
+        </div>
+        <div class="header-right">
+          <button class="btn-copy" id="btn-copy" style="display:none" onclick="copiarLink()">🔗 Copiar link</button>
+          <div class="chip">Chat Viewer</div>
+        </div>
+      </div>
+
+      <div id="chat-box">
+        <div class="state-box">
+          <div class="icon">⏳</div>
+          Carregando conversa…
+        </div>
+      </div>
+
+      <div class="footer">
+        <a
+          href="https://webhook.gmgrowth.site/form/0ba04270-8d08-46d2-98ee-bc9149cf782d"
+          target="_top"
+          class="btn-nova"
+        >🟣 Nova conversa</a>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const SUPABASE_URL  = 'https://rydlkqomjokkhxghgqde.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5ZGxrcW9tam9ra2h4Z2hncWRlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzNDk3MjksImV4cCI6MjA4NDkyNTcyOX0.dSFlYGHcsJw2HIlrqXlF7eK7ij0JJ72VbeTcWqFxFws';
+
+    const supabase  = createClient(SUPABASE_URL, SUPABASE_ANON);
+    const chatBox   = document.getElementById('chat-box');
+    const subtitle  = document.getElementById('subtitle');
+    const btnCopy   = document.getElementById('btn-copy');
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    function escapeHtml(str = '') {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function actorStyle(actorRaw = '') {
+      const a = actorRaw.trim().toLowerCase();
+      const isYou =
+        a.includes('eu') ||
+        a.includes('você') ||
+        a.includes('voce') ||
+        a.includes('time') ||
+        a.includes('cardápio web') ||
+        a.includes('cardapio web');
+
+      if (isYou) {
+        return {
+          side: 'right',
+          bubbleBg: 'linear-gradient(135deg, #6A3696, #8246B8)',
+          bubbleColor: '#ffffff',
+          border: 'rgba(255,255,255,.18)',
+          chipBg: 'rgba(255,255,255,.18)',
+          chipColor: '#fff',
+          nameColor: '#fff',
+        };
+      }
+      return {
+        side: 'left',
+        bubbleBg: '#ffffff',
+        bubbleColor: '#101828',
+        border: '#eef2f6',
+        chipBg: '#f3ecfa',
+        chipColor: '#6A3696',
+        nameColor: '#6A3696',
+      };
+    }
+
+    const REGEX = /^(.*?\])\s*([^:]+):\s*(.*)$/;
+
+    function renderConversa(conversa) {
+      const linhas = conversa.split('\n').map(l => l.trim()).filter(Boolean);
+
+      return linhas.map(linha => {
+        const match = linha.match(REGEX);
+
+        if (!match) {
+          return `
+            <div style="display:flex;justify-content:flex-start;margin:10px 0;">
+              <div style="
+                max-width:92%;background:#fff;border:1px solid #eef2f6;
+                border-radius:14px;padding:10px 12px;
+                box-shadow:0 1px 2px rgba(16,24,40,.06);
+                color:#101828;font-size:14px;line-height:1.55;
+              ">${escapeHtml(linha)}</div>
+            </div>`;
+        }
+
+        const [, timestampRaw, actorRaw, messageRaw] = match;
+        const timestamp = escapeHtml(timestampRaw);
+        const actor     = escapeHtml(actorRaw);
+        const message   = escapeHtml(messageRaw).replaceAll('\n', '<br/>');
+        const st        = actorStyle(actorRaw);
+        const isRight   = st.side === 'right';
+
+        return `
+          <div style="display:flex;justify-content:${isRight ? 'flex-end' : 'flex-start'};margin:12px 0;">
+            <div style="max-width:92%;">
+              <div style="display:inline-flex;align-items:center;gap:8px;margin-bottom:6px;">
+                <span style="
+                  display:inline-block;padding:4px 10px;border-radius:999px;
+                  background:${st.chipBg};color:${st.chipColor};
+                  font-size:12px;font-weight:600;white-space:nowrap;
+                ">${timestamp}</span>
+                <span style="
+                  font-size:12px;font-weight:700;color:${st.nameColor};white-space:nowrap;
+                ">${actor}</span>
+              </div>
+              <div style="
+                background:${st.bubbleBg};color:${st.bubbleColor};
+                border:1px solid ${st.border};border-radius:18px;
+                ${isRight ? 'border-top-right-radius:6px;' : 'border-top-left-radius:6px;'}
+                padding:12px 14px;box-shadow:0 6px 18px rgba(16,24,40,.08);
+                font-size:14px;line-height:1.6;word-break:break-word;
+              ">${message}</div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function showError(icon, title, detail = '') {
+      chatBox.innerHTML = `
+        <div class="state-box">
+          <div class="icon">${icon}</div>
+          <strong>${title}</strong>
+          ${detail ? `<br/><span style="font-size:13px;color:#667085;margin-top:6px;display:block;">${detail}</span>` : ''}
+        </div>`;
+    }
+
+    function copiarLink() {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        btnCopy.textContent = '✅ Copiado!';
+        setTimeout(() => { btnCopy.textContent = '🔗 Copiar link'; }, 2000);
+      });
+    }
+    window.copiarLink = copiarLink;
+
+    // ── main ─────────────────────────────────────────────────────────────────
+
+    const params  = new URLSearchParams(window.location.search);
+    const leadId  = params.get('lead_id');
+
+    if (!leadId) {
+      showError('🔗', 'lead_id não informado', 'Acesse esta página com ?lead_id=UUID na URL.');
+    } else {
+      const { data, error } = await supabase
+        .from('leads_conversa')
+        .select('lead_id, name, whatsapp, conversa')
+        .eq('lead_id', leadId)
+        .maybeSingle();
+
+      if (error) {
+        showError('⚠️', 'Erro ao carregar', escapeHtml(error.message));
+      } else if (!data) {
+        showError('🔍', 'Conversa não encontrada', `Nenhum lead com id <code>${escapeHtml(leadId)}</code>.`);
+      } else {
+        // Atualiza cabeçalho
+        const nomeLabel    = data.name    ? escapeHtml(data.name)    : 'Lead';
+        const whatsLabel   = data.whatsapp ? escapeHtml(data.whatsapp) : '';
+        document.title     = `${nomeLabel} · Conversa · Cardápio Web`;
+        subtitle.innerHTML = whatsLabel
+          ? `${nomeLabel} &nbsp;·&nbsp; ${whatsLabel} &nbsp;·&nbsp; Cardápio Web`
+          : `${nomeLabel} &nbsp;·&nbsp; Cardápio Web`;
+
+        btnCopy.style.display = 'inline-block';
+
+        // Renderiza conversa
+        const html = data.conversa ? renderConversa(data.conversa) : '';
+        chatBox.innerHTML = html || `
+          <div class="state-box">
+            <div class="icon">💬</div>
+            <strong>Sem mensagens registradas</strong>
+          </div>`;
+
+        // Scroll para o fim da conversa
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+    }
+  </script>
+</body>
+</html>
